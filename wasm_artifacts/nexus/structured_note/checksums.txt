@@ -1,0 +1,1 @@
+054728622cd02cac093b2dfc4e156f8099c595f12ec1f1bbb050f1a9e12c52a0  structured_note.wasm
