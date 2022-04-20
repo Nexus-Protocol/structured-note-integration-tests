@@ -5,7 +5,8 @@ import {
     deduct_tax,
     execute_contract,
     get_random_addr,
-    init_terraswap_factory, query_aterra_rate, query_native_token_balance, query_token_balance,
+    init_terraswap_factory,
+    query_aterra_rate,
     query_ts_pair_addr,
     store_cw20
 } from "../../utils";
@@ -200,12 +201,9 @@ export async function open_position_leverage_1(lcd_client: LCDClient, sender: Wa
     let farmers_positions: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
         farmers_positions: {farmer_addr: sender.key.accAddress}
     });
-    console.log(`-----> collateral - expected: ${expected_collateral}, actual - ${farmers_positions.collateral}`);
-    console.log(`-----> loan - expected: ${expected_loan}, actual - ${farmers_positions.loan}`);
-
-    assert(expected_loan ==  (+ farmers_positions.loan));
-    assert(expected_collateral ==  (+ farmers_positions.collateral));
-    console.log(`structured_note test: "open_position_leverage_1 passed!"`)
+    assert(expected_loan == (+farmers_positions[0].loan));
+    assert(expected_collateral == (+farmers_positions[0].collateral));
+    console.log(`structured_note test: "open_position_leverage_1 passed!"`);
 }
 
 async function mint_masset_with_stable(lcd_client: LCDClient, sender: Wallet, init_result: FullInitResult, masset_token: Addr, amount: number, collateral_ratio: Decimal) {
