@@ -1,8 +1,8 @@
 ## Required dependencies
 
 1. https://github.com/Anchor-Protocol/money-market-contracts (`v0.3.1` tag);
-2. https://github.com/Anchor-Protocol/anchor-token-contracts (`0.3.0` tag);
-3. https://github.com/Anchor-Protocol/anchor-bAsset-contracts(`v0.2.1` tag);
+2. https://github.com/Anchor-Protocol/anchor-token-contracts (`v0.3.0` tag);
+3. https://github.com/Anchor-Protocol/anchor-bAsset-contracts( `v0.2.1` tag);
 4. https://github.com/Anchor-Protocol/anchor-bEth-contracts (`v0.2.0` tag);
 
 ---

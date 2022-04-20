@@ -19,9 +19,10 @@ import {
 import {SecretsManager} from 'aws-sdk';
 import * as prompt from 'prompt';
 import {isTxSuccess} from './transaction';
-import {Addr, PairInfoResponse, TokenConfig, u64} from "./config";
+import {Addr, EpochStateResponse, PairInfoResponse, TokenConfig, u64} from "./config";
 import {cw20_contract_wasm, terraswap_factory_wasm, terraswap_pair_wasm, terraswap_token_wasm} from "./artifacts_paths";
-import BN from "bn.js";
+import BN from "bignumber.js";
+import {response} from "express";
 
 export async function create_contract(lcd_client: LCDClient, sender: Wallet, contract_name: string, wasm_path: string, init_msg: object, init_funds?: Coin[]): Promise<Addr> {
     let code_id = await store_contract(lcd_client, sender, wasm_path);
@@ -418,12 +419,12 @@ export function deduct_tax(amount: number) {
     const tax = Math.min(
         amount -
         new BN(amount)
-            .mul(DECIMAL_FRACTION)
-            .div(DECIMAL_FRACTION.div(new BN(1000)).add(DECIMAL_FRACTION))
+            .times(DECIMAL_FRACTION)
+            .div(DECIMAL_FRACTION.div(new BN(1000)).plus(DECIMAL_FRACTION))
             .toNumber(),
         1000000
     );
-    return amount - tax;
+    return Math.floor(amount - tax);
 }
 
 /**
@@ -436,4 +437,36 @@ export function deduct_tax(amount: number) {
 export function add_tax(amount: number) {
     const tax = Math.min(new BN(amount).div(new BN(1000)).toNumber(), 1000000);
     return amount + tax;
+}
+
+export async function query_native_token_balance(
+    lcd_client: LCDClient,
+    account: Addr,
+    denom: string
+) {
+    const balance = (await lcd_client.bank.balance(account)).get(denom)?.amount.toString();
+    if (balance) {
+        return  + balance;
+    } else {
+        return 0;
+    }
+}
+
+export async function query_token_balance(
+    lcd_client: LCDClient,
+    token_addr: Addr,
+    account: Addr,
+) {
+    const res = await lcd_client.wasm.contractQuery<{ balance: string }>(token_addr, {
+        balance: { address: account },
+    })
+
+    return + res.balance;
+}
+
+export async function query_aterra_rate(lcd_client: LCDClient, anchor_market_addr: Addr) {
+    let res:  EpochStateResponse = await lcd_client.wasm.contractQuery(anchor_market_addr,
+        {epoch_state: {}});
+
+    return + res.exchange_rate;
 }

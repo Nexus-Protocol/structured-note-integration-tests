@@ -461,6 +461,11 @@ export function AnchorMarketInfo(
     }
 }
 
+export interface EpochStateResponse {
+    exchange_rate: Decimal256,
+    aterra_supply: Uint256,
+}
+
 // ================================================
 // ---Mirror---
 // ================================================
@@ -796,7 +801,7 @@ export interface TeFiOracleHubConfig {
     max_proxies_per_symbol: u8,
 }
 
-export function TeFiOracleHubConfig (
+export function TeFiOracleHubConfig(
     owner: Addr      // factory
 ): TeFiOracleHubConfig {
     return {
@@ -812,7 +817,7 @@ export interface OracleProxyConfig {
     source_addr: Addr,
 }
 
-export function OracleProxyConfig(source_addr: Addr): OracleProxyConfig{
+export function OracleProxyConfig(source_addr: Addr): OracleProxyConfig {
     return {
         source_addr: source_addr,
     }
@@ -857,6 +862,16 @@ export interface FullInitResult {
     structured_note_addr: Addr,
     mirror_info: MirrorInfo,
     anchor_info: AnchorMarketInfo,
+}
+
+export interface PositionResponse {
+    farmer_addr: Addr,
+    masset_token: Addr,
+    cdp_idx: Uint128,
+    leverage: u8,
+    loan: Uint128,
+    collateral: Uint128,
+    aim_collateral_ratio: Decimal,
 }
 
 // ================================================

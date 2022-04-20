@@ -1,23 +1,33 @@
 import {BlockTxBroadcastResult, Coin, getContractEvents, isTxError, LCDClient, Wallet} from "@terra-money/terra.js";
 import {
+    add_tax,
     create_contract,
     deduct_tax,
     execute_contract,
     get_random_addr,
-    init_terraswap_factory,
+    init_terraswap_factory, query_aterra_rate, query_native_token_balance, query_token_balance,
     query_ts_pair_addr,
     store_cw20
 } from "../../utils";
 import {deploy_anchor} from "../../deploy_anchor/definition";
 import {deploy_mirror, register_collateral, whitelist_masset, whitelist_proxy} from "../../deploy_mirror/definition";
-import {Addr, Decimal, FullInitResult, OracleProxyConfig, StructuredNoteConfig, u8} from "../../config";
+import {
+    Addr,
+    Decimal,
+    FullInitResult,
+    OracleProxyConfig,
+    PositionResponse,
+    StructuredNoteConfig,
+    u8
+} from "../../config";
 import {oracle_proxy_wasm, structured_note_wasm} from "../../artifacts_paths";
 import * as assert from "assert";
+import BigNumber from "bignumber.js";
 
 //1. Deploy Anchor
 //2. Deploy Mirror
 //3. Deploy Structured_note
-export async function run_integration_tests(
+export async function init(
     lcd_client: LCDClient,
     sender: Wallet,
 ): Promise<FullInitResult> {
@@ -73,14 +83,14 @@ export async function run_integration_tests(
 //      1.4. whitelist masset
 // 2. Register collateral asset
 // 3. Provide liquidity to mAsset-stable pair
-//      3.1. Mint some mAsset (open position)
-//      3.2 Provide liquidity to the pair
+//      3.1. Mint some mAsset
+//      3.2. Provide liquidity to the pair
 // 4. Open new position
 // 5. Checks
 //      5.1. leverage
 //      5.2. collateral
 //      5.3. loan
-export async function open_position(lcd_client: LCDClient, sender: Wallet, init_result: FullInitResult) {
+export async function open_position_leverage_1(lcd_client: LCDClient, sender: Wallet, init_result: FullInitResult) {
     // 1.1.
     const oracle_proxy_config = OracleProxyConfig(sender.key.accAddress);
     const oracle_proxy_addr = await create_contract(lcd_client, sender, "oracle_proxy", oracle_proxy_wasm, oracle_proxy_config);
@@ -113,13 +123,31 @@ export async function open_position(lcd_client: LCDClient, sender: Wallet, init_
         "2.0"
     );
     //3.2.
+    let pair_addr = await query_ts_pair_addr(
+        lcd_client,
+        init_result.terraswap_factory_addr,
+        [
+            {
+                token: {
+                    contract_addr: masset_token,
+                },
+            },
+            {
+                native_token: {
+                    denom: "uusd"
+                },
+            },
+        ]);
+
+    const one_hundred_m = 100_000_000;
+
     await provide_liquidity_asset_stable(
         lcd_client,
         sender,
-        init_result,
+        pair_addr,
         masset_token,
-        100_000_000,
-        100_000_000,
+        one_hundred_m,
+        add_tax(one_hundred_m),
     );
     //4.
     const DEPOSIT_AMOUNT = 10_000_000;
@@ -142,21 +170,42 @@ export async function open_position(lcd_client: LCDClient, sender: Wallet, init_
         const actual_cycles_amount = await get_leverage_cycles_amount(open_position_result);
         assert(LEVERAGE == actual_cycles_amount);
     }
-    //5.2
-    const first_stable_deposit = deduct_tax(DEPOSIT_AMOUNT);
-    console.log(`first_stable_deposit: ${first_stable_deposit}`);
+    //5.2 - 5.3
+    //=================================================================================================================
+    // first_anc_deposit = DEPOSIT_AMOUNT - tax
+    // query aUST exchange rate: aterra_rate
+    // first_collateral (aterra) = first_anc_deposit * aterra_rate
+    // loan (mAsset) = (first_collateral_value/AIM_COLLATERAL_RATIO) * mAsset_price
+    //-----------------------------------------------------------------------------------------------------------------
+    // SWAP
+    // k = pool_mAsset * pool_uusd
+    // total_exchange_result = pool_uusd - k / (pool_mAsset + offer_mAsset)
+    // return_stable_without_fee = returnAmount * feeRate = return_stable - (return_stable * pool_commission)
+    // return_stable_fin = deductTax(return_stable_without_fee)
+    //=================================================================================================================
+    const first_anc_deposit = deduct_tax(DEPOSIT_AMOUNT);
+    const aterra_rate = await query_aterra_rate(lcd_client, init_result.anchor_info.contract_addr);
+    const first_collateral = first_anc_deposit * aterra_rate;
+    // masset_price = 1;
+    const expected_loan = Math.floor((first_collateral /  (+ AIM_COLLATERAL_RATIO)) * 1);
+    //swap. commission for mirror pools is fixed and equals to 0,3%
+    const pool_commission = 0.003;
+    const k = new BigNumber(one_hundred_m).times(one_hundred_m);
+    const total_exchange_result = new BigNumber(one_hundred_m).minus(new BigNumber(k).div(new BigNumber(one_hundred_m).plus(expected_loan)));
+    const exchange_result_without_commission = Math.floor(total_exchange_result.minus(total_exchange_result.times(pool_commission)).toNumber());
+    const return_stable = deduct_tax(exchange_result_without_commission);
+    const second_collateral = return_stable * aterra_rate;
+    const expected_collateral = first_collateral + second_collateral;
 
-    console.log(`open_position_result : ${JSON.stringify(open_position_result)}`);
-
-    let farmers_positions = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
+    let farmers_positions: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
         farmers_positions: {farmer_addr: sender.key.accAddress}
     });
-    console.log(`----->farmers_positions: ${JSON.stringify(farmers_positions)}`);
+    console.log(`-----> collateral - expected: ${expected_collateral}, actual - ${farmers_positions.collateral}`);
+    console.log(`-----> loan - expected: ${expected_loan}, actual - ${farmers_positions.loan}`);
 
-    let position = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
-        position: {masset_token: masset_token}
-    });
-    console.log(`position: ${JSON.stringify(position)}`);
+    assert(expected_loan ==  (+ farmers_positions.loan));
+    assert(expected_collateral ==  (+ farmers_positions.collateral));
+    console.log(`structured_note test: "open_position_leverage_1 passed!"`)
 }
 
 async function mint_masset_with_stable(lcd_client: LCDClient, sender: Wallet, init_result: FullInitResult, masset_token: Addr, amount: number, collateral_ratio: Decimal) {
@@ -189,25 +238,10 @@ async function mint_masset_with_stable(lcd_client: LCDClient, sender: Wallet, in
 async function provide_liquidity_asset_stable(
     lcd_client: LCDClient,
     sender: Wallet,
-    init_result: FullInitResult,
+    pair_addr: Addr,
     masset_token: Addr,
     masset_amount: number,
     stable_amount: number) {
-    let pair_addr = await query_ts_pair_addr(
-        lcd_client,
-        init_result.terraswap_factory_addr,
-        [
-            {
-                token: {
-                    contract_addr: masset_token,
-                },
-            },
-            {
-                native_token: {
-                    denom: "uusd"
-                },
-            },
-        ]);
     // increase allowance
     await execute_contract(
         lcd_client,
