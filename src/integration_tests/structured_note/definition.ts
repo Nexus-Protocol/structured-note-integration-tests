@@ -177,6 +177,51 @@ export async function open_position_test_leverage_2(lcd_client: LCDClient, sende
     console.log(`structured_note: "open_position_test_leverage_2" passed!`);
 }
 
+export async function raw_deposit_test(lcd_client: LCDClient, sender: Wallet, init_result: FullInitResult) {
+    const ONE_HUNDRED_M = 100_000_000;
+
+    const res = await setup(lcd_client, sender, init_result, ONE_HUNDRED_M * 2);
+    const masset_token = res[0];
+
+    const LEVERAGE = 1;
+    const AIM_COLLATERAL_RATIO = "2.0";
+    const DEPOSIT_AMOUNT = 10_000_000;
+    await execute_contract(lcd_client, sender, init_result.structured_note_addr, {
+            deposit: {
+                masset_token: masset_token,
+                leverage: LEVERAGE,
+                aim_collateral_ratio: AIM_COLLATERAL_RATIO,
+            }
+        },
+        [new Coin("uusd", DEPOSIT_AMOUNT)],
+    );
+
+    const RAW_DEPOSIT_AMOUNT = 5_000_000;
+    const position_before_raw_deposit: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
+        farmers_positions: {farmer_addr: sender.key.accAddress}
+    });
+
+    await execute_contract(lcd_client, sender, init_result.structured_note_addr, {
+            raw_deposit: {
+                masset_token: masset_token,
+            }
+        },
+        [new Coin("uusd", RAW_DEPOSIT_AMOUNT)],
+    );
+    const position_after_raw_deposit: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
+        farmers_positions: {farmer_addr: sender.key.accAddress}
+    });
+
+    const aterra_rate = await query_aterra_rate(lcd_client, init_result.anchor_info.contract_addr);
+    const expected_collateral_diff = deduct_tax(RAW_DEPOSIT_AMOUNT) * aterra_rate;
+
+    const actual_collateral_diff = (+position_after_raw_deposit[0].collateral) - (+position_before_raw_deposit[0].collateral);
+
+    assert(expected_collateral_diff == actual_collateral_diff);
+    assert(+position_before_raw_deposit[0].loan == +position_after_raw_deposit[0].loan);
+    console.log(`structured_note: "raw_deposit_test" passed!`);
+}
+
 //----------------------------------------------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------------------------------------------
