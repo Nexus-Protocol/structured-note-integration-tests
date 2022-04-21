@@ -1,6 +1,6 @@
 import {Command} from 'commander';
 import {get_lcd_config_with_wallet_for_integration_tests_only} from "../../utils";
-import {init, raw_deposit_test} from "./definition";
+import {init, raw_deposit_test, raw_withdraw_test} from "./definition";
 
 async function run_program() {
 	const program = new Command();
@@ -18,7 +18,8 @@ async function run() {
 	let init_result = await init(lcd_client, sender);
 	// await open_position_test_leverage_1(lcd_client, sender, init_result);
 	// await open_position_test_leverage_2(lcd_client, sender, init_result);
-	await raw_deposit_test(lcd_client, sender, init_result);
+	// await raw_deposit_test(lcd_client, sender, init_result);
+	await raw_withdraw_test(lcd_client, sender, init_result);
 }
 
 run_program()

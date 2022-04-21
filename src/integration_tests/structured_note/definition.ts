@@ -222,6 +222,61 @@ export async function raw_deposit_test(lcd_client: LCDClient, sender: Wallet, in
     console.log(`structured_note: "raw_deposit_test" passed!`);
 }
 
+export async function raw_withdraw_test(lcd_client: LCDClient, sender: Wallet, init_result: FullInitResult) {
+    const ONE_HUNDRED_M = 100_000_000;
+
+    const res = await setup(lcd_client, sender, init_result, ONE_HUNDRED_M * 2);
+    const masset_token = res[0];
+
+    const LEVERAGE = 1;
+    const AIM_COLLATERAL_RATIO = "2.0";
+    const DEPOSIT_AMOUNT = 10_000_000;
+
+    await execute_contract(lcd_client, sender, init_result.structured_note_addr, {
+            deposit: {
+                masset_token: masset_token,
+                leverage: LEVERAGE,
+                aim_collateral_ratio: AIM_COLLATERAL_RATIO,
+            }
+        },
+        [new Coin("uusd", DEPOSIT_AMOUNT)],
+    );
+    //position state before withdraw
+    //loan = 4_995_004
+    //collateral = 14_728_370
+    //minimal_collateral_ratio = 1.65
+    //minimal_collateral = minimal_collateral_ratio * loan = 4_995_004 * 1,65 = 8_241_756
+    //max_withdraw_amount = collateral - minimal_collateral = 14_728_370 - 7_999_006
+    const RAW_WITHDRAW_AMOUNT = 1_000_000;
+    const position_before_raw_withdraw: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
+        farmers_positions: {farmer_addr: sender.key.accAddress}
+    });
+    console.log(`position_before_raw_withdraw: ${JSON.stringify(position_before_raw_withdraw)}`);
+
+    const raw_withdraw_result = await execute_contract(lcd_client, sender, init_result.structured_note_addr, {
+            raw_withdraw: {
+                masset_token: masset_token,
+                amount: RAW_WITHDRAW_AMOUNT.toString(),
+            }
+        },
+    );
+
+    console.log(`raw_withdraw_result: ${JSON.stringify(raw_withdraw_result)}`);
+
+    // const position_after_raw_deposit: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
+    //     farmers_positions: {farmer_addr: sender.key.accAddress}
+    // });
+    //
+    // const aterra_rate = await query_aterra_rate(lcd_client, init_result.anchor_info.contract_addr);
+    // const expected_collateral_diff = deduct_tax(RAW_DEPOSIT_AMOUNT) * aterra_rate;
+    //
+    // const actual_collateral_diff = (+position_after_raw_deposit[0].collateral) - (+position_before_raw_deposit[0].collateral);
+    //
+    // assert(expected_collateral_diff == actual_collateral_diff);
+    // assert(+position_before_raw_deposit[0].loan == +position_after_raw_deposit[0].loan);
+    // console.log(`structured_note: "raw_deposit_test" passed!`);
+}
+
 //----------------------------------------------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------------------------------------------
