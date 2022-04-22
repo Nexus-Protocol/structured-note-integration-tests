@@ -22,7 +22,6 @@ import {isTxSuccess} from './transaction';
 import {Addr, EpochStateResponse, PairInfoResponse, TokenConfig, u64} from "./config";
 import {cw20_contract_wasm, terraswap_factory_wasm, terraswap_pair_wasm, terraswap_token_wasm} from "./artifacts_paths";
 import BN from "bignumber.js";
-import {response} from "express";
 
 export async function create_contract(lcd_client: LCDClient, sender: Wallet, contract_name: string, wasm_path: string, init_msg: object, init_funds?: Coin[]): Promise<Addr> {
     let code_id = await store_contract(lcd_client, sender, wasm_path);
@@ -160,11 +159,11 @@ function parse_pair_creation(pair_creation_result: BlockTxBroadcastResult): Terr
 
 export async function calc_fee_and_send_tx(lcd_client: LCDClient, sender: Wallet, messages: Msg[], _tax?: Coin[]): Promise<BlockTxBroadcastResult | undefined> {
     try {
-        // const estimated_tx_fee = await get_tx_fee(lcd_client, sender, messages, tax);
-        // if (estimated_tx_fee === undefined) {
-        // 	return undefined;
-        // }
-        const estimated_tx_fee = new StdFee(300_000_000 / 0.15, [new Coin("uusd", 300_303_000)]);
+        const estimated_tx_fee = await get_tx_fee(lcd_client, sender, messages, _tax);
+        if (estimated_tx_fee === undefined) {
+            return undefined;
+        }
+        // const estimated_tx_fee = new StdFee(300_000_000 / 0.15, [new Coin("uusd", 300_303_000)]);
 
         const signed_tx = await sender.createAndSignTx({
             msgs: messages,

@@ -7,7 +7,9 @@ import {
     get_random_addr,
     init_terraswap_factory,
     query_aterra_rate,
+    query_native_token_balance,
     query_ts_pair_addr,
+    sleep,
     store_cw20
 } from "../../utils";
 import {deploy_anchor} from "../../deploy_anchor/definition";
@@ -246,35 +248,51 @@ export async function raw_withdraw_test(lcd_client: LCDClient, sender: Wallet, i
     //collateral = 14_728_370
     //minimal_collateral_ratio = 1.65
     //minimal_collateral = minimal_collateral_ratio * loan = 4_995_004 * 1,65 = 8_241_756
-    //max_withdraw_amount = collateral - minimal_collateral = 14_728_370 - 7_999_006
+    //max_withdraw_amount = collateral - minimal_collateral = 14_728_370 - 8_241_756 = 6_486_614
     const RAW_WITHDRAW_AMOUNT = 1_000_000;
     const position_before_raw_withdraw: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
         farmers_positions: {farmer_addr: sender.key.accAddress}
     });
-    console.log(`position_before_raw_withdraw: ${JSON.stringify(position_before_raw_withdraw)}`);
+    await sleep(1000);
+    const farmer_balance_before_withdraw = await query_native_token_balance(lcd_client, sender.key.accAddress, "uusd");
 
-    const raw_withdraw_result = await execute_contract(lcd_client, sender, init_result.structured_note_addr, {
+    let result = await execute_contract(lcd_client, sender, init_result.structured_note_addr, {
             raw_withdraw: {
                 masset_token: masset_token,
                 amount: RAW_WITHDRAW_AMOUNT.toString(),
             }
         },
     );
+    if (isTxError(result)) {
+        return Error("raw withdraw failed");
+    } else {
+        console.log(`gas_wanted: ${result.gas_wanted}`);
+        console.log(`gas_used: ${result.gas_used}`);
+    }
 
-    console.log(`raw_withdraw_result: ${JSON.stringify(raw_withdraw_result)}`);
+    const position_after_raw_withdraw: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
+        farmers_positions: {farmer_addr: sender.key.accAddress}
+    });
+    await sleep(1000);
+    const farmer_balance_after_withdraw = await query_native_token_balance(lcd_client, sender.key.accAddress, "uusd");
+    const farmer_balance_after_withdraw_without_gas = farmer_balance_after_withdraw;
 
-    // const position_after_raw_deposit: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
-    //     farmers_positions: {farmer_addr: sender.key.accAddress}
-    // });
-    //
-    // const aterra_rate = await query_aterra_rate(lcd_client, init_result.anchor_info.contract_addr);
-    // const expected_collateral_diff = deduct_tax(RAW_DEPOSIT_AMOUNT) * aterra_rate;
-    //
-    // const actual_collateral_diff = (+position_after_raw_deposit[0].collateral) - (+position_before_raw_deposit[0].collateral);
-    //
-    // assert(expected_collateral_diff == actual_collateral_diff);
-    // assert(+position_before_raw_deposit[0].loan == +position_after_raw_deposit[0].loan);
-    // console.log(`structured_note: "raw_deposit_test" passed!`);
+    const aterra_rate = await query_aterra_rate(lcd_client, init_result.anchor_info.contract_addr);
+    const redeem_stable = deduct_tax(RAW_WITHDRAW_AMOUNT * aterra_rate);
+    const expected_balance_diff = deduct_tax(redeem_stable);
+    const actual_balance_diff = farmer_balance_after_withdraw_without_gas - farmer_balance_before_withdraw;
+    console.log(`balance before withdraw: ${farmer_balance_before_withdraw}`);
+    console.log(`balance after withdraw:  ${farmer_balance_after_withdraw}`);
+
+    const actual_collateral_diff = (+position_before_raw_withdraw[0].collateral) - (+position_after_raw_withdraw[0].collateral);
+    console.log(`collateral_diff - expected: ${RAW_WITHDRAW_AMOUNT}, actual: ${actual_collateral_diff}`);
+    console.log(`balance_diff - expected: ${expected_balance_diff}, actual: ${actual_balance_diff}`);
+    console.log(`loan - before: ${position_before_raw_withdraw[0].loan}, after: ${position_after_raw_withdraw[0].loan}`);
+
+    assert(RAW_WITHDRAW_AMOUNT == actual_collateral_diff);
+    assert(+position_before_raw_withdraw[0].loan == +position_after_raw_withdraw[0].loan);
+    assert(expected_balance_diff == actual_balance_diff);
+    console.log(`structured_note: "raw_deposit_test" passed!`);
 }
 
 //----------------------------------------------------------------------------------------------------------------------
