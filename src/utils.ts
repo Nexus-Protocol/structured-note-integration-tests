@@ -460,12 +460,12 @@ export async function query_token_balance(
         balance: { address: account },
     })
 
-    return + res.balance;
+    return +res.balance;
 }
 
 export async function query_aterra_rate(lcd_client: LCDClient, anchor_market_addr: Addr) {
-    let res:  EpochStateResponse = await lcd_client.wasm.contractQuery(anchor_market_addr,
+    let res: EpochStateResponse = await lcd_client.wasm.contractQuery(anchor_market_addr,
         {epoch_state: {}});
 
-    return + res.exchange_rate;
+    return +res.exchange_rate;
 }
