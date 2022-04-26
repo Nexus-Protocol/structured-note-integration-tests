@@ -404,6 +404,117 @@ export async function single_loan_repayment_withdraw_test(lcd_client: LCDClient,
     console.log(`structured_note: "single_loan_repayment_withdraw_test" passed!`);
 }
 
+export async function multi_collateral_withdrawing_withdraw_test(lcd_client: LCDClient, sender: Wallet, init_result: FullInitResult) {
+    const ONE_HUNDRED_M = 100_000_000;
+
+    const res = await setup(lcd_client, sender, init_result, ONE_HUNDRED_M * 2);
+    const masset_token = res[0];
+
+    const LEVERAGE = 1;
+    const AIM_COLLATERAL_RATIO = "2.0";
+    const DEPOSIT_AMOUNT = 10_000_000;
+
+    await execute_contract(lcd_client, sender, init_result.structured_note_addr, {
+            deposit: {
+                masset_token: masset_token,
+                leverage: LEVERAGE,
+                aim_collateral_ratio: AIM_COLLATERAL_RATIO,
+            }
+        },
+        [new Coin("uusd", DEPOSIT_AMOUNT)],
+    );
+    //position state before withdraw
+    //loan = 4_995_004
+    //collateral = 14_728_370
+    //current_collateral_ratio = collateral * collateral_asset_price / loan * loan_asset_price = 14_728_370 * 1 / 4_995_004 * 1 = 2.948620261365156063939
+    //minimal_collateral_ratio = 1.65
+    //minimal_collateral = minimal_collateral_ratio * loan = 4_995_004 * 1,65 = 8_241_756
+    //withdraw_to_min_collateral = collateral - minimal_collateral = 14_728_370 - 8_241_756 = 6_486_614
+    const AIM_COLLATERAL = 7_000_000;
+    // aim_collateral_ratio without c-ratio correction = 2.5
+    // to set collateral_ratio > 2.5 c-ratio correction by partial loan repayment is required
+    const AIM_COLLATERAL_RATIO_WITHDRAW = 2.0;
+    //AIM_LOAN = AIM_COLLATERAL/AIM_COLLATERAL_RATIO = 12_487_510/2.6 = 4802888.461538461538462
+    const AIM_LOAN = 3_500_000;
+
+    const position_before_withdraw: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
+        farmers_positions: {farmer_addr: sender.key.accAddress}
+    });
+
+    //
+    // store before withdraw for expected calculation
+    //
+
+    const aterra_rate = await query_aterra_rate(lcd_client, init_result.anchor_info.contract_addr);
+
+    let pair_addr = await query_ts_pair_addr(
+        lcd_client,
+        init_result.terraswap_factory_addr,
+        [
+            {
+                token: {
+                    contract_addr: masset_token,
+                },
+            },
+            {
+                native_token: {
+                    denom: "uusd"
+                },
+            },
+        ]);
+
+    let pool_masset_balance = await query_token_balance(lcd_client, pair_addr, masset_token);
+    let pool_stable_balance = await query_native_token_balance(lcd_client, pair_addr, "uusd");
+
+    let result = await execute_contract(lcd_client, sender, init_result.structured_note_addr, {
+            withdraw: {
+                masset_token: masset_token,
+                aim_collateral: AIM_COLLATERAL.toString(),
+                aim_collateral_ratio: AIM_COLLATERAL_RATIO_WITHDRAW.toString(),
+            }
+        },
+    );
+
+    let actual_return_stable_amount = 0;
+    if (isTxError(result)) {
+        return Error("withdraw failed");
+    } else {
+        let contract_events = getContractEvents(result);
+        for (let contract_event of contract_events) {
+            let return_amount = contract_event["return_amount"];
+            if (return_amount !== undefined) {
+                actual_return_stable_amount = +return_amount;
+            }
+        }
+    }
+
+    const position_after_withdraw: PositionResponse = await lcd_client.wasm.contractQuery(init_result.structured_note_addr, {
+        farmers_positions: {farmer_addr: sender.key.accAddress}
+    });
+
+    const withdraw_amount = (+position_before_withdraw[0].collateral) - AIM_COLLATERAL;
+    const redeem_stable = deduct_tax(withdraw_amount * aterra_rate);
+
+    const MASSET_PRICE = 1;
+    const loan_diff_value = (+position_before_withdraw[0].loan - AIM_LOAN) * MASSET_PRICE;
+
+    const POOL_COMMISSION = 0.003;
+    const return_masset_amount = calculate_swap_return(POOL_COMMISSION, pool_stable_balance, pool_masset_balance, deduct_tax(loan_diff_value));
+
+    const expected_return_stable_amount = deduct_tax(redeem_stable - loan_diff_value);
+
+    const expected_loan_amount = +position_before_withdraw[0].loan - return_masset_amount;
+
+    console.log(`collateral - expected: ${AIM_COLLATERAL}, actual: ${position_after_withdraw[0].collateral}`);
+    console.log(`loan - ecpected: ${expected_loan_amount}, actual: ${position_after_withdraw[0].loan}`);
+    console.log(`return_amount: ${expected_return_stable_amount}, actual: ${actual_return_stable_amount}`);
+    assert(AIM_COLLATERAL == +position_after_withdraw[0].collateral);
+    //TODO: fix rounding inaccuracy in test
+    assert(Math.abs(expected_loan_amount - position_after_withdraw[0].loan) <= 1);
+    assert(Math.abs(expected_return_stable_amount - actual_return_stable_amount) <= 1);
+    console.log(`structured_note: "multi_collateral_withdrawing_withdraw_test" passed!`);
+}
+
 export async function raw_withdraw_test(lcd_client: LCDClient, sender: Wallet, init_result: FullInitResult) {
     const ONE_HUNDRED_M = 100_000_000;
 
