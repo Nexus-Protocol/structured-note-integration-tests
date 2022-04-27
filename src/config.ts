@@ -674,7 +674,7 @@ export function MirrorMintConfig(
         lock: lock,
         base_denom: "uusd",
         token_code_id: token_code_id,
-        protocol_fee_rate: "0.15",
+        protocol_fee_rate: "0.015",
     }
 }
 

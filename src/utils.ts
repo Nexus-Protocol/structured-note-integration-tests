@@ -159,11 +159,11 @@ function parse_pair_creation(pair_creation_result: BlockTxBroadcastResult): Terr
 
 export async function calc_fee_and_send_tx(lcd_client: LCDClient, sender: Wallet, messages: Msg[], _tax?: Coin[]): Promise<BlockTxBroadcastResult | undefined> {
     try {
-        const estimated_tx_fee = await get_tx_fee(lcd_client, sender, messages, _tax);
-        if (estimated_tx_fee === undefined) {
-            return undefined;
-        }
-        // const estimated_tx_fee = new StdFee(300_000_000 / 0.15, [new Coin("uusd", 300_303_000)]);
+        // const estimated_tx_fee = await get_tx_fee(lcd_client, sender, messages, _tax);
+        // if (estimated_tx_fee === undefined) {
+        //     return undefined;
+        // }
+        const estimated_tx_fee = new StdFee(300_000_000 / 0.15, [new Coin("uusd", 300_303_000)]);
 
         const signed_tx = await sender.createAndSignTx({
             msgs: messages,
@@ -453,8 +453,8 @@ export async function query_native_token_balance(
 
 export async function query_token_balance(
     lcd_client: LCDClient,
-    token_addr: Addr,
     account: Addr,
+    token_addr: Addr,
 ) {
     const res = await lcd_client.wasm.contractQuery<{ balance: string }>(token_addr, {
         balance: { address: account },

@@ -1,6 +1,6 @@
 import {Command} from 'commander';
 import {get_lcd_config_with_wallet_for_integration_tests_only} from "../../utils";
-import {init, multi_collateral_withdrawing_withdraw_test} from "./definition";
+import {init, multi_loan_repayment_withdraw_test} from "./definition";
 
 async function run_program() {
 	const program = new Command();
@@ -22,7 +22,8 @@ async function run() {
 	// await raw_withdraw_test(lcd_client, sender, init_result);
 	// await no_loan_repayment_withdraw_test(lcd_client, sender, init_result);
 	// await single_loan_repayment_withdraw_test(lcd_client, sender, init_result);
-	await multi_collateral_withdrawing_withdraw_test(lcd_client, sender, init_result);
+	// await multi_collateral_withdrawing_withdraw_test(lcd_client, sender, init_result);
+	await multi_loan_repayment_withdraw_test(lcd_client, sender, init_result);
 }
 
 run_program()
